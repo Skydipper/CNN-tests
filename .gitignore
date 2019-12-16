@@ -94,6 +94,8 @@ ipython_config.py
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow
 __pypackages__/
 
+*/*.hdf5
+
 # Celery stuff
 celerybeat-schedule
 celerybeat.pid
@@ -109,6 +111,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+*/privatekey.json
+*/env.py
 
 # Spyder project settings
 .spyderproject

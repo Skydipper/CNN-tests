@@ -1,0 +1,33 @@
+version: '3'
+services:
+  gen_data:
+    build:
+      context: ./src/
+      dockerfile: Dockerfile.train_data
+    volumes:
+      - ~/.config/earthengine/credentials:/root/.config/earthengine/credentials 
+  preprocess:
+    build:
+      context: ./src/
+      dockerfile: Dockerfile.preprocess
+    volumes:
+      - ~/.config/earthengine/credentials:/root/.config/earthengine/credentials
+      - ./samples:/scripts/samples
+  train:
+    build:
+      context: ./src/
+      dockerfile: Dockerfile.train
+    volumes:
+      - ./samples:/scripts/samples
+      - ./networks:/scripts/networks
+      - ./models:/scripts/models
+  predict:
+    build:
+      context: ./src/
+      dockerfile: Dockerfile.predict
+    volumes:
+      - ./samples:/scripts/samples
+      - ./models:/scripts/models
+      - ./outputs:/scripts/outputs
+
+      
