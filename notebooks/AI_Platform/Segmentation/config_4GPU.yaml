@@ -1,0 +1,11 @@
+trainingInput:
+  scaleTier: CUSTOM
+  # Configure a master worker with 4 K80 GPUs
+  masterType: complex_model_m_gpu
+  # Configure 9 workers, each with 4 K80 GPUs
+  workerCount: 9
+  workerType: complex_model_m_gpu
+  # Configure 3 parameter servers with no GPUs
+  parameterServerCount: 3
+  parameterServerType: large_model
+

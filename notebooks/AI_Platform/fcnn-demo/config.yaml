@@ -1,0 +1,6 @@
+trainingInput:
+  scaleTier: CUSTOM
+  # A single NVIDIA Tesla V100 GPU
+  masterType: large_model_v100
+
+
