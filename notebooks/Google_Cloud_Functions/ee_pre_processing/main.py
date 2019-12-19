@@ -96,5 +96,7 @@ def ee_pre_processing(request):
 
         # Normalize images
         image = normalize_ee_images(image, collection, values)
+    else:
+        values = {}
         
     return json.dumps({'bands_min_max': values, 'composite': image.serialize()})
