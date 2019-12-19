@@ -94,7 +94,17 @@ ipython_config.py
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow
 __pypackages__/
 
-*/*.hdf5
+*.hdf5
+env.py
+privatekey.json
+requirements.txt
+config.yaml
+*/*.DS_Store
+
+# OS generated files #
+######################
+.DS_Store
+.DS_Store?
 
 # Celery stuff
 celerybeat-schedule

@@ -2,7 +2,6 @@
 import ee
 import json
 import numpy as np
-import functools
 import ee_collection_specifics
 import env
 
@@ -10,76 +9,47 @@ account = env.service_account
 credentials = ee.ServiceAccountCredentials(account, 'privatekey.json')
 ee.Initialize(credentials)
 
-@functools.lru_cache(maxsize=128)
 def min_max_values(image, collection, scale):
     
     normThreshold = ee_collection_specifics.ee_bands_normThreshold(collection)
     
-    geometry = {
-      "type": "FeatureCollection",
-      "features": [
-        {
-          "type": "Feature",
-          "properties": {},
-          "geometry": {
-            "type": "Polygon",
-            "coordinates":  [
-              [
-                [
-                  -180,
-                  -90
-                ],
-                [
-                  180,
-                  -90
-                ],
-                [
-                  180,
-                  90
-                ],
-                [
-                  -180,
-                  90
-                ],
-                [
-                  -180,
-                  -90
-                ]
-              ]
-            ]
-          }
-        }
-      ]
-    }
+    num = 2
+    lon = np.linspace(-180, 180, num)
+    lat = np.linspace(-90, 90, num)
     
-    geometry = json.dumps(geometry)
-    geometry = json.loads(geometry)
+    features = []
+    for i in range(len(lon)-1):
+        for j in range(len(lat)-1):
+            features.append(ee.Feature(ee.Geometry.Rectangle(lon[i], lat[j], lon[i+1], lat[j+1])))
     
     regReducer = {
-        'collection': ee.FeatureCollection(geometry.get('features')),
+        'geometry': ee.FeatureCollection(features),
         'reducer': ee.Reducer.minMax(),
-        'crs':'EPSG:4326',
-        'scale':scale,
-        'tileScale': 4
+        'maxPixels': 1e10,
+        'bestEffort': True,
+        'scale':scale
+        
     }
     
-    values = image.reduceRegions(**regReducer).toList(10000).getInfo()[0].get('properties')
+    values = image.reduceRegion(**regReducer).getInfo()
+    print(values)
     
     # Avoid outliers by taking into account only the normThreshold% of the data points.
     regReducer = {
-        'collection': ee.FeatureCollection(geometry.get('features')),
+        'geometry': ee.FeatureCollection(features),
         'reducer': ee.Reducer.histogram(),
-        'crs':'EPSG:4326',
-        'scale':scale,
-        'tileScale': 4
+        'maxPixels': 1e10,
+        'bestEffort': True,
+        'scale':scale
+        
     }
     
-    hist = image.reduceRegions(**regReducer).toList(10000).getInfo()
+    hist = image.reduceRegion(**regReducer).getInfo()
 
     for band in list(normThreshold.keys()):
         if normThreshold[band] != 100:
-            count = np.array(hist[0].get('properties').get(band).get('histogram'))
-            x = np.array(hist[0].get('properties').get(band).get('bucketMeans'))
+            count = np.array(hist.get(band).get('histogram'))
+            x = np.array(hist.get(band).get('bucketMeans'))
         
             cumulative_per = np.cumsum(count/count.sum()*100)
         
@@ -127,4 +97,4 @@ def ee_pre_processing(request):
         # Normalize images
         image = normalize_ee_images(image, collection, values)
         
-    return json.dumps({'composite': image.serialize()})
+    return json.dumps({'bands_min_max': values, 'composite': image.serialize()})
