@@ -11,8 +11,7 @@ from tensorflow.python.keras.layers.core import Layer, Activation, Reshape, Perm
 from tensorflow.python.keras.layers.normalization import BatchNormalization
 from tensorflow.python.keras.layers.convolutional import Conv2D, MaxPooling2D, UpSampling2D, ZeroPadding2D
 
-
-def segnet(inputShape, nClasses):
+def create_keras_model(inputShape, nClasses):
     """
     SegNet model
     ----------
@@ -28,7 +27,7 @@ def segnet(inputShape, nClasses):
     pool_size = (2, 2)
         
 
-    inputs = Input(shape=inputShape)
+    inputs = Input(shape=inputShape, name= 'image')
         
     # Encoder
     x = Conv2D(64, kernel, padding='same')(inputs)
@@ -69,14 +68,12 @@ def segnet(inputShape, nClasses):
             
     x = Conv2D(nClasses, (1, 1), padding='valid')(x)
     
-    outputs = Activation('softmax')(x)
+    outputs = Activation('softmax', name= 'output')(x)
         
     model = Model(inputs=inputs, outputs=outputs, name='segnet')
         
     return model
 
 if __name__ == '__main__':
-    model = segnet((496,496,6), 4)
+    model = create_keras_model((256,256,6), 4)
     model.summary()
-    from keras.utils import plot_model
-    plot_model(model, show_shapes=True, to_file='SegNet_tf.png')
