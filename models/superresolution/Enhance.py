@@ -30,9 +30,8 @@ def spatial_reflection_2d_padding(x, padding=((1, 1), (1, 1))):
     assert len(padding[1]) == 2
 
     pattern = [[0, 0],
-               [0, 0],
-               list(padding[0]),
-               list(padding[1])]
+               list(padding[0]), list(padding[1]),
+               [0, 0]]
 
     return tf.pad(x, pattern, "REFLECT")
 
@@ -85,18 +84,18 @@ class ReflectionPadding2D(Layer):
 
     def compute_output_shape(self, input_shape):
         
-        if input_shape[2] is not None:
-            rows = input_shape[2] + self.padding[0][0] + self.padding[0][1]
+        if input_shape[1] is not None:
+            rows = input_shape[1] + self.padding[0][0] + self.padding[0][1]
         else:
             rows = None
-        if input_shape[3] is not None:
-            cols = input_shape[3] + self.padding[1][0] + self.padding[1][1]
+        if input_shape[2] is not None:
+            cols = input_shape[2] + self.padding[1][0] + self.padding[1][1]
         else:
             cols = None
         return (input_shape[0],
-                input_shape[1],
                 rows,
-                cols)
+                cols,
+                input_shape[3])
 
     def call(self, inputs):
         return spatial_reflection_2d_padding(inputs,
@@ -107,7 +106,7 @@ class ReflectionPadding2D(Layer):
         base_config = super(ReflectionPadding2D, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
-def create_keras_model(inputShape, noise=1e-3, depth=5, activation='relu', n_filters=64, l2_reg=1e-4):
+def create_keras_model(inputShape, nClasses, noise=1e-3, depth=5, activation='relu', n_filters=64, l2_reg=1e-4):
     """
     Deep residual network that keeps the size of the input throughout the whole network
     """
@@ -147,12 +146,12 @@ def create_keras_model(inputShape, noise=1e-3, depth=5, activation='relu', n_fil
     x = Conv2D(n_filters, (3, 3), padding='valid', kernel_initializer='he_normal', kernel_regularizer=l2(l2_reg))(x)
     x = Activation(activation)(x)
 
-    outputs = Conv2D(1, (1, 1), padding='same', kernel_initializer='he_normal', kernel_regularizer=l2(l2_reg))(x)
+    outputs = Conv2D(nClasses, (1, 1), padding='same', kernel_initializer='he_normal', kernel_regularizer=l2(l2_reg))(x)
 
     model = Model(inputs=inputs, outputs=outputs, name='enhance')
 
     return model
 
 if __name__ == '__main__':
-    model = create_keras_model((256,256,1))
+    model = create_keras_model((256,256,3), 3)
     model.summary()
