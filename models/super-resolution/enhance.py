@@ -106,7 +106,7 @@ class ReflectionPadding2D(Layer):
         base_config = super(ReflectionPadding2D, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
-def create_keras_model(inputShape, nClasses, noise=1e-3, depth=5, activation='relu', n_filters=64, l2_reg=1e-4):
+def create_keras_model(inputShape, nClasses, scale=2, noise=1e-3, depth=5, activation='relu', n_filters=64, l2_reg=1e-4):
     """
     Deep residual network that keeps the size of the input throughout the whole network
     """
@@ -140,8 +140,9 @@ def create_keras_model(inputShape, nClasses, noise=1e-3, depth=5, activation='re
     x = BatchNormalization()(x)
     x = Add()([x, x0])
 
-    # Upsampling for superresolution
-    x = UpSampling2D()(x)
+    # Upsampling for super-resolution
+    x = UpSampling2D(size=(scale, scale))(x)
+
     x = ReflectionPadding2D()(x)
     x = Conv2D(n_filters, (3, 3), padding='valid', kernel_initializer='he_normal', kernel_regularizer=l2(l2_reg))(x)
     x = Activation(activation)(x)
@@ -153,5 +154,5 @@ def create_keras_model(inputShape, nClasses, noise=1e-3, depth=5, activation='re
     return model
 
 if __name__ == '__main__':
-    model = create_keras_model((256,256,3), 3)
+    model = create_keras_model((256,256,3), 6, 3)
     model.summary()
