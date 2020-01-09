@@ -1,14 +1,14 @@
 """Trains a Keras model"""
 
-from . import config
-from . import model
-from . import util
-
 import os
 import time
+
 import tensorflow as tf
 
-
+from . import config
+from . import util
+from . import model
+          
 def train_and_evaluate():
     """Trains and evaluates the Keras model.
 

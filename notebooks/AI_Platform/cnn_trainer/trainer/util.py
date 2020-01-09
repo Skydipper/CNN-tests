@@ -1,7 +1,8 @@
 """Utilities to download and preprocess the data."""
 
-from . import config
 import tensorflow as tf
+
+from . import config
 
 def parse_function(proto):
     """The parsing function.
