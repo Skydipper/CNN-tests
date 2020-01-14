@@ -22,7 +22,7 @@ def residual(inputs, filter_size, kernel):
     x = Add()([x, inputs])  
     return x
 
-def create_keras_model(inputShape, nClasses):
+def create_keras_model(inputShape, nClasses, output_activation='softmax'):
     """
     DeepVel model
     ----------
@@ -44,7 +44,7 @@ def create_keras_model(inputShape, nClasses):
     x = Conv2D(filter_size, kernel, padding='same', kernel_initializer='he_normal')(x)
     x = BatchNormalization()(x)
     x = Add()([x, conv])    
-    outputs = Conv2D(nClasses, (1, 1), activation='softmax', padding='same', kernel_initializer='he_normal', name= 'output')(x) 
+    outputs = Conv2D(nClasses, (1, 1), activation=output_activation, padding='same', kernel_initializer='he_normal', name= 'output')(x) 
     model = Model(inputs=inputs, outputs=outputs, name='deepvel')
 
     return model

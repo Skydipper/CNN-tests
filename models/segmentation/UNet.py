@@ -41,7 +41,7 @@ def decoder_block(input_tensor, concat_tensor, num_filters):
 
     return decoder
 
-def create_keras_model(inputShape, nClasses):
+def create_keras_model(inputShape, nClasses, output_activation='softmax'):
     """
     U-Net model
     ----------
@@ -62,7 +62,7 @@ def create_keras_model(inputShape, nClasses):
     decoder2 = decoder_block(decoder3, encoder2, 128) 
     decoder1 = decoder_block(decoder2, encoder1, 64) 
     decoder0 = decoder_block(decoder1, encoder0, 32) 
-    outputs = layers.Conv2D(nClasses, (1, 1), activation='softmax')(decoder0)
+    outputs = layers.Conv2D(nClasses, (1, 1), activation=output_activation)(decoder0)
 
     model = models.Model(inputs=inputs, outputs=outputs, name='unet')   
     return model

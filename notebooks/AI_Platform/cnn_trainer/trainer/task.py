@@ -18,7 +18,10 @@ def train_and_evaluate():
     """
 
     # Create the Keras Model
-    keras_model = model.create_keras_model(inputShape = (None, None, len(config.in_bands)), nClasses = len(config.out_bands))
+    if not config.output_activation:
+        keras_model = model.create_keras_model(inputShape = (None, None, len(config.in_bands)), nClasses = len(config.out_bands))
+    else:
+        keras_model = model.create_keras_model(inputShape = (None, None, len(config.in_bands)), nClasses = len(config.out_bands), output_activation = config.output_activation)
 
     # Compile Keras model
     keras_model.compile(loss=config.loss, optimizer=config.optimizer, metrics=config.metrics)

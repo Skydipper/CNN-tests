@@ -25,9 +25,9 @@ def ee_bands(collection):
     """
     
     dic = {
-        'Sentinel2_TOA': ['B1','B2','B3','B4','B5','B6','B7','B8A','B8','B11','B12'],
-        'Landsat7_SR': ['B1','B2','B3','B4','B5','B6','B7'],
-        'Landsat8_SR': ['B1','B2','B3','B4','B5','B6','B7','B10','B11'],
+        'Sentinel2_TOA': ['B1','B2','B3','B4','B5','B6','B7','B8A','B8','B11','B12','ndvi','ndwi'],
+        'Landsat7_SR': ['B1','B2','B3','B4','B5','B6','B7','ndvi','ndwi'],
+        'Landsat8_SR': ['B1','B2','B3','B4','B5','B6','B7','B10','B11','ndvi','ndwi'],
         'CroplandDataLayers': ['landcover', 'cropland', 'land', 'water', 'urban'],
         'NationalLandCoverDatabase': ['impervious']
     }
@@ -102,19 +102,25 @@ def vizz_params(collection):
                       {'min':0,'max':1, 'bands':['B8A']},
                       {'min':0,'max':1, 'bands':['B8']},
                       {'min':0,'max':1, 'bands':['B11']},
-                      {'min':0,'max':1, 'bands':['B12']}],
+                      {'min':0,'max':1, 'bands':['B12']},
+                      {'min':0,'max':1, 'gamma':1.4, 'bands':['ndvi']},
+                      {'min':0,'max':1, 'gamma':1.4, 'bands':['ndwi']}],
         'Landsat7_SR': [{'min':0,'max':1, 'gamma':1.4, 'bands':['B3','B2','B1']}, 
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B4']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B5']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B7']},
-                     {'min':0,'max':1, 'gamma':1.4, 'bands':['B6']}],
+                     {'min':0,'max':1, 'gamma':1.4, 'bands':['B6']},
+                     {'min':0,'max':1, 'gamma':1.4, 'bands':['ndvi']},
+                     {'min':0,'max':1, 'gamma':1.4, 'bands':['ndwi']}],
         'Landsat8_SR': [{'min':0,'max':1, 'gamma':1.4, 'bands':['B4','B3','B2']}, 
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B1']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B5']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B6']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B7']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B10']},
-                     {'min':0,'max':1, 'gamma':1.4, 'bands':['B11']}],
+                     {'min':0,'max':1, 'gamma':1.4, 'bands':['B11']},
+                     {'min':0,'max':1, 'gamma':1.4, 'bands':['ndvi']},
+                     {'min':0,'max':1, 'gamma':1.4, 'bands':['ndwi']}],
         'CroplandDataLayers': [{'min':0,'max':3, 'bands':['landcover']},
                                {'min':0,'max':1, 'bands':['cropland']},
                                {'min':0,'max':1, 'bands':['land']},
@@ -146,6 +152,12 @@ def CloudFreeCompositeL7(startDate, stopDate):
     ## Composite
     composite = collection.median()
     
+    ## normDiff bands
+    normDiff_band_names = ['ndvi', 'ndwi']
+    for nB, normDiff_band in enumerate([['B4','B3'], ['B4','B2']]):
+        image_nd = composite.normalizedDifference(normDiff_band).rename(normDiff_band_names[nB])
+        composite = ee.Image.cat([composite, image_nd])
+    
     return composite
 
 ## Lansat 8 Cloud Free Composite
@@ -174,6 +186,12 @@ def CloudFreeCompositeL8(startDate, stopDate):
 
     ## Composite
     composite = collection.median()
+    
+    ## normDiff bands
+    normDiff_band_names = ['ndvi', 'ndwi']
+    for nB, normDiff_band in enumerate([['B5','B4'], ['B5','B3']]):
+        image_nd = composite.normalizedDifference(normDiff_band).rename(normDiff_band_names[nB])
+        composite = ee.Image.cat([composite, image_nd])
     
     return composite
 
@@ -212,6 +230,12 @@ def CloudFreeCompositeS2(startDate, stopDate):
 
     ## Composite
     composite = collection.median()
+    
+    ## normDiff bands
+    normDiff_band_names = ['ndvi', 'ndwi']
+    for nB, normDiff_band in enumerate([['B8','B4'], ['B8','B3']]):
+        image_nd = composite.normalizedDifference(normDiff_band).rename(normDiff_band_names[nB])
+        composite = ee.Image.cat([composite, image_nd])
     
     return composite
 
@@ -285,3 +309,4 @@ def Composite(collection):
     }
     
     return dic[collection]
+

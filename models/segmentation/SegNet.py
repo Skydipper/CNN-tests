@@ -11,7 +11,7 @@ from tensorflow.python.keras.layers.core import Layer, Activation, Reshape, Perm
 from tensorflow.python.keras.layers.normalization import BatchNormalization
 from tensorflow.python.keras.layers.convolutional import Conv2D, MaxPooling2D, UpSampling2D, ZeroPadding2D
 
-def create_keras_model(inputShape, nClasses):
+def create_keras_model(inputShape, nClasses, output_activation='softmax'):
     """
     SegNet model
     ----------
@@ -68,7 +68,7 @@ def create_keras_model(inputShape, nClasses):
             
     x = Conv2D(nClasses, (1, 1), padding='valid')(x)
     
-    outputs = Activation('softmax', name= 'output')(x)
+    outputs = Activation(output_activation, name= 'output')(x)
         
     model = Model(inputs=inputs, outputs=outputs, name='segnet')
         
