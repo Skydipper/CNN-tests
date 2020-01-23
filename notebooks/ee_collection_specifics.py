@@ -10,11 +10,11 @@ def ee_collections(collection):
     Earth Engine image collection names
     """
     dic = {
-        'Sentinel2_TOA': 'COPERNICUS/S2',
-        'Landsat7_SR': 'LANDSAT/LE07/C01/T1_SR',
-        'Landsat8_SR': 'LANDSAT/LC08/C01/T1_SR',
-        'CroplandDataLayers': 'USDA/NASS/CDL',
-        'NationalLandCoverDatabase': 'USGS/NLCD'
+        'Sentinel-2-Top-of-Atmosphere-Reflectance': 'COPERNICUS/S2',
+        'Landsat-7-Surface-Reflectance': 'LANDSAT/LE07/C01/T1_SR',
+        'Landsat-8-Surface-Reflectance': 'LANDSAT/LC08/C01/T1_SR',
+        'USDA-NASS-Cropland-Data-Layers': 'USDA/NASS/CDL',
+        'USGS-National-Land-Cover-Database': 'USGS/NLCD'
     }
     
     return dic[collection]
@@ -25,11 +25,11 @@ def ee_bands(collection):
     """
     
     dic = {
-        'Sentinel2_TOA': ['B1','B2','B3','B4','B5','B6','B7','B8A','B8','B11','B12','ndvi','ndwi'],
-        'Landsat7_SR': ['B1','B2','B3','B4','B5','B6','B7','ndvi','ndwi'],
-        'Landsat8_SR': ['B1','B2','B3','B4','B5','B6','B7','B10','B11','ndvi','ndwi'],
-        'CroplandDataLayers': ['landcover', 'cropland', 'land', 'water', 'urban'],
-        'NationalLandCoverDatabase': ['impervious']
+        'Sentinel-2-Top-of-Atmosphere-Reflectance': ['B1','B2','B3','B4','B5','B6','B7','B8A','B8','B11','B12','ndvi','ndwi'],
+        'Landsat-7-Surface-Reflectance': ['B1','B2','B3','B4','B5','B6','B7','ndvi','ndwi'],
+        'Landsat-8-Surface-Reflectance': ['B1','B2','B3','B4','B5','B6','B7','B10','B11','ndvi','ndwi'],
+        'USDA-NASS-Cropland-Data-Layers': ['landcover', 'cropland', 'land', 'water', 'urban'],
+        'USGS-National-Land-Cover-Database': ['impervious']
     }
     
     return dic[collection]
@@ -40,11 +40,11 @@ def ee_bands_rgb(collection):
     """
     
     dic = {
-        'Sentinel2_TOA': ['B4','B3','B2'],
-        'Landsat7_SR': ['B3','B2','B1'],
-        'Landsat8_SR': ['B4', 'B3', 'B2'],
-        'CroplandDataLayers': ['landcover'],
-        'NationalLandCoverDatabase': ['impervious']
+        'Sentinel-2-Top-of-Atmosphere-Reflectance': ['B4','B3','B2'],
+        'Landsat-7-Surface-Reflectance': ['B3','B2','B1'],
+        'Landsat-8-Surface-Reflectance': ['B4', 'B3', 'B2'],
+        'USDA-NASS-Cropland-Data-Layers': ['landcover'],
+        'USGS-National-Land-Cover-Database': ['impervious']
     }
     
     return dic[collection]
@@ -55,22 +55,22 @@ def ee_bands_normThreshold(collection):
     """
     
     dic = {
-        'Sentinel2_TOA': {'B1': 75,'B2': 75,'B3': 75,'B4': 75,'B5': 80,'B6': 80,'B7': 80,'B8A': 80,'B8': 80,'B11': 100,'B12': 100},
-        'Landsat7_SR': {'B1': 95,'B2': 95,'B3': 95,'B4': 100,'B5': 100,'B6': 100,'B7': 100},
-        'Landsat8_SR': {'B1': 90,'B2': 95,'B3': 95,'B4': 95,'B5': 100,'B6': 100,'B7': 100,'B10': 100,'B11': 100},
-        'CroplandDataLayers': {'landcover': 100, 'cropland': 100, 'land': 100, 'water': 100, 'urban': 100},
-        'NationalLandCoverDatabase': {'impervious': 100}
+        'Sentinel-2-Top-of-Atmosphere-Reflectance': {'B1': 75,'B2': 75,'B3': 75,'B4': 75,'B5': 80,'B6': 80,'B7': 80,'B8A': 80,'B8': 80,'B11': 100,'B12': 100},
+        'Landsat-7-Surface-Reflectance': {'B1': 95,'B2': 95,'B3': 95,'B4': 100,'B5': 100,'B6': 100,'B7': 100},
+        'Landsat-8-Surface-Reflectance': {'B1': 90,'B2': 95,'B3': 95,'B4': 95,'B5': 100,'B6': 100,'B7': 100,'B10': 100,'B11': 100},
+        'USDA-NASS-Cropland-Data-Layers': {'landcover': 100, 'cropland': 100, 'land': 100, 'water': 100, 'urban': 100},
+        'USGS-National-Land-Cover-Database': {'impervious': 100}
     }
     
     return dic[collection]
 
 def normalize(collection):
     dic = {
-        'Sentinel2_TOA': True,
-        'Landsat7_SR': True,
-        'Landsat8_SR': True,
-        'CroplandDataLayers': False,
-        'NationalLandCoverDatabase': False
+        'Sentinel-2-Top-of-Atmosphere-Reflectance': True,
+        'Landsat-7-Surface-Reflectance': True,
+        'Landsat-8-Surface-Reflectance': True,
+        'USDA-NASS-Cropland-Data-Layers': False,
+        'USGS-National-Land-Cover-Database': False
     }
     
     return dic[collection]
@@ -80,11 +80,11 @@ def vizz_params_rgb(collection):
     Visualization parameters
     """
     dic = {
-        'Sentinel2_TOA': {'min':0,'max':3000, 'bands':['B4','B3','B2']},
-        'Landsat7_SR': {'min':0,'max':3000, 'gamma':1.4, 'bands':['B3','B2','B1']},
-        'Landsat8_SR': {'min':0,'max':3000, 'gamma':1.4, 'bands':['B4','B3','B2']},
-        'CroplandDataLayers': {'min':0,'max':3, 'bands':['landcover']},
-        'NationalLandCoverDatabase': {'min': 0, 'max': 1, 'bands':['impervious']}
+        'Sentinel-2-Top-of-Atmosphere-Reflectance': {'min':0,'max':3000, 'bands':['B4','B3','B2']},
+        'Landsat-7-Surface-Reflectance': {'min':0,'max':3000, 'gamma':1.4, 'bands':['B3','B2','B1']},
+        'Landsat-8-Surface-Reflectance': {'min':0,'max':3000, 'gamma':1.4, 'bands':['B4','B3','B2']},
+        'USDA-NASS-Cropland-Data-Layers': {'min':0,'max':3, 'bands':['landcover']},
+        'USGS-National-Land-Cover-Database': {'min': 0, 'max': 1, 'bands':['impervious']}
     }
     
     return dic[collection]
@@ -94,7 +94,7 @@ def vizz_params(collection):
     Visualization parameters
     """
     dic = {
-        'Sentinel2_TOA': [{'min':0,'max':1, 'bands':['B4','B3','B2']}, 
+        'Sentinel-2-Top-of-Atmosphere-Reflectance': [{'min':0,'max':1, 'bands':['B4','B3','B2']}, 
                       {'min':0,'max':1, 'bands':['B1']},
                       {'min':0,'max':1, 'bands':['B5']},
                       {'min':0,'max':1, 'bands':['B6']},
@@ -105,14 +105,14 @@ def vizz_params(collection):
                       {'min':0,'max':1, 'bands':['B12']},
                       {'min':0,'max':1, 'gamma':1.4, 'bands':['ndvi']},
                       {'min':0,'max':1, 'gamma':1.4, 'bands':['ndwi']}],
-        'Landsat7_SR': [{'min':0,'max':1, 'gamma':1.4, 'bands':['B3','B2','B1']}, 
+        'Landsat-7-Surface-Reflectance': [{'min':0,'max':1, 'gamma':1.4, 'bands':['B3','B2','B1']}, 
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B4']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B5']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B7']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B6']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['ndvi']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['ndwi']}],
-        'Landsat8_SR': [{'min':0,'max':1, 'gamma':1.4, 'bands':['B4','B3','B2']}, 
+        'Landsat-8-Surface-Reflectance': [{'min':0,'max':1, 'gamma':1.4, 'bands':['B4','B3','B2']}, 
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B1']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B5']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B6']},
@@ -121,12 +121,12 @@ def vizz_params(collection):
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['B11']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['ndvi']},
                      {'min':0,'max':1, 'gamma':1.4, 'bands':['ndwi']}],
-        'CroplandDataLayers': [{'min':0,'max':3, 'bands':['landcover']},
+        'USDA-NASS-Cropland-Data-Layers': [{'min':0,'max':3, 'bands':['landcover']},
                                {'min':0,'max':1, 'bands':['cropland']},
                                {'min':0,'max':1, 'bands':['land']},
                                {'min':0,'max':1, 'bands':['water']},
                                {'min':0,'max':1, 'bands':['urban']}],
-        'NationalLandCoverDatabase': [{'min': 0, 'max': 1, 'bands':['impervious']}]
+        'USGS-National-Land-Cover-Database': [{'min': 0, 'max': 1, 'bands':['impervious']}]
     }
     
     return dic[collection]
@@ -301,12 +301,11 @@ def ImperviousData(startDate, stopDate):
 
 def Composite(collection):
     dic = {
-        'Sentinel2_TOA': CloudFreeCompositeS2,
-        'Landsat7_SR': CloudFreeCompositeL7,
-        'Landsat8_SR': CloudFreeCompositeL8,
-        'CroplandDataLayers': CroplandData,
-        'NationalLandCoverDatabase': ImperviousData,
+        'Sentinel-2-Top-of-Atmosphere-Reflectance': CloudFreeCompositeS2,
+        'Landsat-7-Surface-Reflectance': CloudFreeCompositeL7,
+        'Landsat-8-Surface-Reflectance': CloudFreeCompositeL8,
+        'USDA-NASS-Cropland-Data-Layers': CroplandData,
+        'USGS-National-Land-Cover-Database': ImperviousData,
     }
     
     return dic[collection]
-

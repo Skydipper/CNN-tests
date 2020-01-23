@@ -1,0 +1,3 @@
+,model_name,model_type,model_description,output_image_id
+0,segmentation_0_1,segmentation,,1
+1,regression_2,regression,,2
