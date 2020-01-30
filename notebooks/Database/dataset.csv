@@ -1,6 +1,6 @@
-,slug,name,bands,rgb_bands,provider
-0,Sentinel-2-Top-of-Atmosphere-Reflectance,Sentinel 2 Top-of-Atmosphere Reflectance,"['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8A', 'B8', 'B11', 'B12', 'ndvi', 'ndwi']","['B4', 'B3', 'B2']",gee
-1,Landsat-7-Surface-Reflectance,Landsat 7 Surface Reflectance,"['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'ndvi', 'ndwi']","['B3', 'B2', 'B1']",gee
-2,Landsat-8-Surface-Reflectance,Landsat 8 Surface Reflectance,"['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B10', 'B11', 'ndvi', 'ndwi']","['B4', 'B3', 'B2']",gee
-3,USDA-NASS-Cropland-Data-Layers,USDA NASS Cropland Data Layers,"['landcover', 'cropland', 'land', 'water', 'urban']",['landcover'],gee
-4,USGS-National-Land-Cover-Database,USGS National Land Cover Database,['impervious'],['impervious'],gee
+id;slug;name;bands;rgb_bands;provider
+0;Sentinel-2-Top-of-Atmosphere-Reflectance;Sentinel 2 Top-of-Atmosphere Reflectance;'[''B1'', ''B2'', ''B3'', ''B4'', ''B5'', ''B6'', ''B7'', ''B8A'', ''B8'', ''B11'', ''B12'', ''ndvi'', ''ndwi'']';'[''B4'', ''B3'', ''B2'']';gee
+1;Landsat-7-Surface-Reflectance;Landsat 7 Surface Reflectance;'[''B1'', ''B2'', ''B3'', ''B4'', ''B5'', ''B6'', ''B7'', ''ndvi'', ''ndwi'']';'[''B3'', ''B2'', ''B1'']';gee
+2;Landsat-8-Surface-Reflectance;Landsat 8 Surface Reflectance;'[''B1'', ''B2'', ''B3'', ''B4'', ''B5'', ''B6'', ''B7'', ''B10'', ''B11'', ''ndvi'', ''ndwi'']';'[''B4'', ''B3'', ''B2'']';gee
+3;USDA-NASS-Cropland-Data-Layers;USDA NASS Cropland Data Layers;'[''landcover'', ''cropland'', ''land'', ''water'', ''urban'']';'[''landcover'']';gee
+4;USGS-National-Land-Cover-Database;USGS National Land Cover Database;'[''impervious'']';'[''impervious'']';gee
