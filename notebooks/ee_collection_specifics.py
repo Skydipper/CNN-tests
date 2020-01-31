@@ -15,7 +15,7 @@ def ee_collections(collection):
         'Landsat-8-Surface-Reflectance': 'LANDSAT/LC08/C01/T1_SR',
         'USDA-NASS-Cropland-Data-Layers': 'USDA/NASS/CDL',
         'USGS-National-Land-Cover-Database': 'USGS/NLCD',
-        'Skydipper-Water-Quality': 'projects/vizzuality/skydipper-water-quality/LWQ-100m'
+        'Lake-Water-Quality-100m': 'projects/vizzuality/skydipper-water-quality/LWQ-100m'
     }
     
     return dic[collection]
@@ -31,7 +31,7 @@ def ee_bands(collection):
         'Landsat-8-Surface-Reflectance': ['B1','B2','B3','B4','B5','B6','B7','B10','B11','ndvi','ndwi'],
         'USDA-NASS-Cropland-Data-Layers': ['landcover', 'cropland', 'land', 'water', 'urban'],
         'USGS-National-Land-Cover-Database': ['impervious'],
-        'Skydipper-Water-Quality': ['turbidity_blended_mean']
+        'Lake-Water-Quality-100m': ['turbidity_blended_mean']
     }
     
     return dic[collection]
@@ -47,7 +47,7 @@ def ee_bands_rgb(collection):
         'Landsat-8-Surface-Reflectance': ['B4', 'B3', 'B2'],
         'USDA-NASS-Cropland-Data-Layers': ['landcover'],
         'USGS-National-Land-Cover-Database': ['impervious'],
-        'Skydipper-Water-Quality': ['turbidity_blended_mean']
+        'Lake-Water-Quality-100m': ['turbidity_blended_mean']
     }
     
     return dic[collection]
@@ -63,7 +63,7 @@ def ee_bands_normThreshold(collection):
         'Landsat-8-Surface-Reflectance': {'B1': 90,'B2': 95,'B3': 95,'B4': 95,'B5': 100,'B6': 100,'B7': 100,'B10': 100,'B11': 100},
         'USDA-NASS-Cropland-Data-Layers': {'landcover': 100, 'cropland': 100, 'land': 100, 'water': 100, 'urban': 100},
         'USGS-National-Land-Cover-Database': {'impervious': 100},
-        'Skydipper-Water-Quality': {'turbidity_blended_mean': 100}
+        'Lake-Water-Quality-100m': {'turbidity_blended_mean': 100}
     }
     
     return dic[collection]
@@ -75,7 +75,7 @@ def normalize(collection):
         'Landsat-8-Surface-Reflectance': True,
         'USDA-NASS-Cropland-Data-Layers': False,
         'USGS-National-Land-Cover-Database': False,
-        'Skydipper-Water-Quality': False
+        'Lake-Water-Quality-100m': False
     }
     
     return dic[collection]
@@ -90,7 +90,7 @@ def vizz_params_rgb(collection):
         'Landsat-8-Surface-Reflectance': {'min':0,'max':3000, 'gamma':1.4, 'bands':['B4','B3','B2']},
         'USDA-NASS-Cropland-Data-Layers': {'min':0,'max':3, 'bands':['landcover']},
         'USGS-National-Land-Cover-Database': {'min': 0, 'max': 1, 'bands':['impervious']},
-        'Skydipper-Water-Quality': {'min': 0, 'max': 1, 'bands':['turbidity_blended_mean']}
+        'Lake-Water-Quality-100m': {'min': 0, 'max': 1, 'bands':['turbidity_blended_mean']}
     }
     
     return dic[collection]
@@ -133,7 +133,7 @@ def vizz_params(collection):
                                {'min':0,'max':1, 'bands':['water']},
                                {'min':0,'max':1, 'bands':['urban']}],
         'USGS-National-Land-Cover-Database': [{'min': 0, 'max': 1, 'bands':['impervious']}],
-        'Skydipper-Water-Quality': [{'min': 0, 'max': 1, 'bands':['turbidity_blended_mean']}],
+        'Lake-Water-Quality-100m': [{'min': 0, 'max': 1, 'bands':['turbidity_blended_mean']}],
         
     }
     
@@ -329,7 +329,7 @@ def Composite(collection):
         'Landsat-8-Surface-Reflectance': CloudFreeCompositeL8,
         'USDA-NASS-Cropland-Data-Layers': CroplandData,
         'USGS-National-Land-Cover-Database': ImperviousData,
-        'Skydipper-Water-Quality': WaterQuality
+        'Lake-Water-Quality-100m': WaterQuality
     }
     
     return dic[collection]

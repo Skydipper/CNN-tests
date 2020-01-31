@@ -4,3 +4,4 @@ id;slug;name;bands;rgb_bands;provider
 2;Landsat-8-Surface-Reflectance;Landsat 8 Surface Reflectance;'[''B1'', ''B2'', ''B3'', ''B4'', ''B5'', ''B6'', ''B7'', ''B10'', ''B11'', ''ndvi'', ''ndwi'']';'[''B4'', ''B3'', ''B2'']';gee
 3;USDA-NASS-Cropland-Data-Layers;USDA NASS Cropland Data Layers;'[''landcover'', ''cropland'', ''land'', ''water'', ''urban'']';'[''landcover'']';gee
 4;USGS-National-Land-Cover-Database;USGS National Land Cover Database;'[''impervious'']';'[''impervious'']';gee
+5;Lake-Water-Quality-100m;Lake Water Quality 100m;'[''turbidity_blended_mean'']';'[''turbidity_blended_mean'']';gee
