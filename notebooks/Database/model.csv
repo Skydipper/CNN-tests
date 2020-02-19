@@ -1,1 +1,2 @@
 id;model_name;model_type;model_output;model_description;output_image_id
+0;water_quality;MLP;regression;;1

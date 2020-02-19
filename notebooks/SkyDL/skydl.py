@@ -7,12 +7,17 @@ import time
 import pandas as pd
 import requests
 import getpass
+import argparse
+from argparse import Namespace
+from ee.cli.utils import CommandLineConfig
+from ee.cli.commands import PrepareModelCommand
 from shapely.geometry import shape
 from google.cloud import storage
 from google.cloud.storage import blob
 from googleapiclient import discovery
 from googleapiclient import errors
 from oauth2client.client import GoogleCredentials
+from tensorflow.python.tools import saved_model_utils
 
 from .utils import df_from_query, df_to_db, df_to_csv, polygons_to_geoStoreMultiPoligon, get_geojson_string,\
     min_max_values, normalize_ee_images, get_image_ids, GeoJSONs_to_FeatureCollections, check_status_data,\
@@ -21,7 +26,7 @@ import ee_collection_specifics
 
 class Trainer(object):
     """
-    Training and prediction of Deep Learning models in Skydipper
+    Training of Deep Learning models in Skydipper
     ----------
     privatekey_path: string
         A string specifying the direction of a json keyfile on your local filesystem
@@ -41,12 +46,15 @@ class Trainer(object):
         self.table_names = self.engine.table_names()
         #self.datasets_api = Skydipper.Collection(search=' '.join(self.slugs_list), object_type=['dataset'], app=['skydipper'], limit=len(self.slugs_list))
         self.ee_tiles = 'https://earthengine.googleapis.com/map/{mapid}/{{z}}/{{x}}/{{y}}?token={token}' 
-        self.datasets = self.get_table(table_name='dataset')
-        self.images = self.get_table(table_name='image')
-        self.models = self.get_table(table_name='model')
-        self.versions = self.get_table(table_name='model_versions')
+        self.datasets = df_from_query(self.engine, 'dataset') 
+        self.images = df_from_query(self.engine, 'image')  
+        self.models = df_from_query(self.engine, 'model') 
+        self.versions = df_from_query(self.engine, 'model_versions') 
         self.bucket = 'geo-ai'
         self.project_id = 'skydipper-196010'
+        # Get a Python representation of the AI Platform Training services
+        self.credentials = GoogleCredentials.from_stream(self.privatekey_path)
+        self.ml = discovery.build('ml', 'v1', credentials = self.credentials)
         ee.Initialize()
 
         # TODO
@@ -67,16 +75,6 @@ class Trainer(object):
         r = requests.post(url, data=json.dumps(payload), headers=headers)
 
         self.token = r.json().get('data').get('token')
-
-    def get_table(self, table_name='model_versions'):
-        """
-        Retrieve table from database.
-        Parameters
-        ----------
-        table_name: string
-            Table name
-        """
-        return df_from_query(self.engine, table_name)
 
     def composite(self, slugs=["Sentinel-2-Top-of-Atmosphere-Reflectance"], init_date='2019-01-01', end_date='2019-12-31', lat=39.31, lon=0.302, zoom=6):
         """
@@ -269,11 +267,18 @@ class Trainer(object):
             dataset_id = self.datasets[self.datasets['slug'] == slug].index[0]
 
             # Populate image table
-            if not self.images[['dataset_id', 'scale', 'init_date', 'end_date', 'bands_min_max', 'norm_type']]\
-                                .isin([dataset_id, self.scale, self.init_date, self.end_date, self.values[n], self.norm_type]).all(axis=1).any():
+            if self.norm_type == 'geostore':
+                condition = self.images[['dataset_id', 'scale', 'init_date', 'end_date', 'norm_type', 'geostore_id']]\
+                                .isin([dataset_id, self.scale, self.init_date, self.end_date, self.norm_type, self.geostore_id]).all(axis=1).any()
+                dictionary = dict(zip(list(self.images.keys()), [[dataset_id], [''], [self.scale], [self.init_date], [self.end_date], [self.values[n]], [self.norm_type], [self.geostore_id]]))
+            else:
+                condition = self.images[['dataset_id', 'scale', 'init_date', 'end_date', 'norm_type']]\
+                                .isin([dataset_id, self.scale, self.init_date, self.end_date, self.norm_type]).all(axis=1).any()
+                dictionary = dict(zip(list(self.images.keys()), [[dataset_id], [''], [self.scale], [self.init_date], [self.end_date], [self.values[n]], [self.norm_type], ['']]))
+
+            if not condition:
                 # Append values to table
-                dictionary = dict(zip(list(self.images.keys()), [[dataset_id], [''], [self.scale], [self.init_date], [self.end_date], [self.values[n]], [self.norm_type]]))
-                self.images = self.images.append(pd.DataFrame(dictionary), ignore_index = True)
+                self.images = self.images.append(pd.DataFrame(dictionary), ignore_index = True, sort=False)
 
         # Returns a folium map with normalized images
         map = folium.Map(location=self.centroid, zoom_start=6)
@@ -324,12 +329,21 @@ class Trainer(object):
         
             dataset_id = self.datasets[self.datasets['slug'] == slug].index[0]
 
-            df = self.images[(self.images['dataset_id'] == dataset_id) & 
-                        (self.images['scale'] == self.scale) & 
-                        (self.images['init_date'] == self.init_date) & 
-                        (self.images['end_date'] == self.end_date) & 
-                        (self.images['norm_type'] == self.norm_type)
-                       ].copy()
+            if self.norm_type == 'geostore':
+                df = self.images[(self.images['dataset_id'] == dataset_id) & 
+                            (self.images['scale'] == self.scale) & 
+                            (self.images['init_date'] == self.init_date) & 
+                            (self.images['end_date'] == self.end_date) & 
+                            (self.images['norm_type'] == self.norm_type) & 
+                            (self.images['geostore_id'] == self.geostore_id)
+                           ].copy()
+            else:
+                df = self.images[(self.images['dataset_id'] == dataset_id) & 
+                            (self.images['scale'] == self.scale) & 
+                            (self.images['init_date'] == self.init_date) & 
+                            (self.images['end_date'] == self.end_date) & 
+                            (self.images['norm_type'] == self.norm_type)
+                           ].copy()
 
             # Take rows where bands_selections column is empty
             df1 = df[df['bands_selections'] == ''].copy()
@@ -533,6 +547,20 @@ class Trainer(object):
             df_to_csv(self.versions, "model_versions")
             df_to_db(self.images, self.engine, "image")
             df_to_db(self.versions, self.engine, "model_versions")
+
+    def check_trainig_status(self, ml, project, job_name):
+        # Monitoring the training job
+        jobId = '{}/jobs/{}'.format(project, job_name)
+        request = ml.projects().jobs().get(name=jobId)
+        # Make the call.
+        try:
+            response = request.execute()
+        except errors.HttpError as err:
+            # Something went wrong, print out some information.
+            print('There was an error monitoring the training job. Check the details:')
+            print(err._get_reason())
+
+        return response['state']
                
     def train_model_ai_platform(self, model_type='CNN', model_output='segmentation', model_architecture='segnet',\
                                 model_name = None, model_description='', output_activation='', batch_size=32,\
@@ -682,38 +710,37 @@ class Trainer(object):
         df = self.versions[['input_image_id', 'output_image_id', 'geostore_id', 'kernel_size', 'sample_size']\
                           ].isin([self.image_ids[0], self.image_ids[1], self.geostore_id, self.kernel_size, self.sample_size]).copy()
         df = self.versions.copy()
-        df['training_params'] = df['training_params'].apply(lambda x : removekey(json.loads(x),'job_dir'))
+        df['training_params'] = df['training_params'].apply(lambda x : removekey(json.loads(x),['job_dir', 'training_size', 'validation_size']))
 
         # Check if the version already exists
-        if (df['training_params'] == self.training_params).any():
+        if (df['training_params'] == removekey(self.training_params.copy(), ['training_size', 'validation_size'])).any():
             # Get version id
-            version_id = df[df['training_params'].apply(lambda x : removekey(x,'job_dir')) == self.training_params].index[0]
-
+            self.version_id = df[df['training_params'] == removekey(self.training_params.copy(), ['training_size', 'validation_size'])].index[0]
             # Check status
-            status = df.iloc[version_id]['training_status']
+            status = df.iloc[self.version_id]['training_status']
             print('Version already exists with training status equal to:', status)
+
+            # Get training version
+            self.training_version = df.iloc[self.version_id]['version']
+
+            # Add job directory
+            self.training_params['job_dir'] = 'gs://' + self.bucket + '/Models/' + str(self.model_id) + '/' +  str(self.training_version) + '/'
 
             if status == 'SUCCEEDED':
                 print('The training job successfully completed.')
+                return
             if (status == 'CANCELLED') or (status == 'FAILED'):
                 print(f'The training job was {status}.')
                 if status == 'CANCELLED':  
                     print('Start training again.')
                 if status == 'FAILED': 
                     print('Change training parameters and try again.')
-                # Get training version
-                self.training_version = df.iloc[version_id]['version']
-
                 # Update job name
                 job_name = 'job_v' + str(int(time.time()))
 
-                # Add job directory
-                self.training_params = json.loads(df.iloc[version_id]['training_params'])
-                self.training_params['job_dir'] = 'gs://' + bucket + '/Models/' + str(self.model_id) + '/' +  str(self.training_version) + '/'
-
                 # Save training version and clear status
-                self.versions.at[version_id, 'training_params'] =  json.dumps(self.training_params)
-                self.versions.at[version_id, 'training_status'] = ''
+                self.versions.at[self.version_id, 'training_params'] =  json.dumps(self.training_params)
+                self.versions.at[self.version_id, 'training_status'] = ''
 
                 # Remove job_dir
                 tmp_path = self.training_params['job_dir'].replace(f'gs://{self.bucket}/','')
@@ -737,22 +764,22 @@ class Trainer(object):
 
             # Check if untrained version already exists
             if (df.all(axis=1).any()):
-                version_id = df[df.all(axis=1)].index[0]
+                self.version_id = df[df.all(axis=1)].index[0]
 
-                self.versions.at[version_id, 'model_id'] = self.model_id
-                self.versions.at[version_id, 'model_architecture'] = self.model_architecture
-                self.versions.at[version_id, 'training_params'] = json.dumps(self.training_params)
-                self.versions.at[version_id, 'version'] = self.training_version
+                self.versions.at[self.version_id, 'model_id'] = self.model_id
+                self.versions.at[self.version_id, 'model_architecture'] = self.model_architecture
+                self.versions.at[self.version_id, 'training_params'] = json.dumps(self.training_params)
+                self.versions.at[self.version_id, 'version'] = self.training_version
 
             else:
                 dictionary = dict(zip(list(self.versions.keys()), [[''], [''], [self.image_ids[0]], [self.image_ids[1]], [self.geostore_id], [self.kernel_size], [self.sample_size], [''], [''], ['COMPLETED'], [''], [''], ['']]))
                 self.versions = self.versions.append(pd.DataFrame(dictionary), ignore_index = True, sort=False)
-                version_id = self.versions.index[-1]
+                self.version_id = self.versions.index[-1]
 
-                self.versions.at[version_id, 'model_id'] = int(self.model_id)
-                self.versions.at[version_id, 'model_architecture'] = self.model_architecture
-                self.versions.at[version_id, 'training_params'] = json.dumps(self.training_params)
-                self.versions.at[version_id, 'version'] = int(self.training_version)
+                self.versions.at[self.version_id, 'model_id'] = int(self.model_id)
+                self.versions.at[self.version_id, 'model_architecture'] = self.model_architecture
+                self.versions.at[self.version_id, 'training_params'] = json.dumps(self.training_params)
+                self.versions.at[self.version_id, 'version'] = int(self.training_version)
 
 
         # set version table's types
@@ -786,16 +813,11 @@ class Trainer(object):
         job_spec = {'jobId': job_name, 'trainingInput': self.training_inputs}
 
         print('Creating training job: ' + job_name)
-
         # Save your project ID in the format the APIs need
         project = 'projects/{}'.format(self.project_id)
 
-        # Get a Python representation of the AI Platform Training services
-        credentials = GoogleCredentials.from_stream(self.privatekey_path)
-        ml = discovery.build('ml', 'v1', credentials = credentials)
-
         # Create a request to call projects.jobs.create.
-        request = ml.projects().jobs().create(body=job_spec,
+        request = self.ml.projects().jobs().create(body=job_spec,
                       parent=project)
 
         # Make the call.
@@ -808,18 +830,491 @@ class Trainer(object):
             print('There was an error creating the training job. Check the details:')
             print(err._get_reason())
             
-        # Save training status
-        self.request_get = ml.projects().jobs().get(name=job_name,
-              parent=project)
-        self.response_get = self.request_get.execute()
+        # Monitoring the training job
+        self.status = self.check_trainig_status(self.ml, project, job_name)
+        while not self.status in ['SUCCEEDED', 'FAILED', 'CANCELLED']:
+            self.status = self.check_trainig_status(self.ml, project, job_name)
+            #Save temporal status in table
+            self.versions.at[self.version_id, 'training_status'] = self.status    
+            print('Current training status: ' +  self.status)
+
+            time.sleep(60)
+
+        #Save final status in table
+        self.versions.at[self.version_id, 'training_status'] = self.status
 
         # TODO
         # Save image and model_versions tables
-        df_to_csv(self.images, "image")
+        df_to_csv(self.models, "model")
         df_to_csv(self.versions, "model_versions")
-        df_to_db(self.images, self.engine, "image")
+        df_to_db(self.models, self.engine, "model")
         df_to_db(self.versions, self.engine, "model_versions")
 
+    def check_deployment_status(self, ml, project, model_name, version_name):
+        # Monitoring the training job
+        versionId = f'{project}/models/{model_name}/versions/{version_name}'
+        request = ml.projects().models().versions().get(name=versionId)
+        # Make the call.
+        try:
+            response = request.execute()
+        except errors.HttpError as err:
+            # Something went wrong, print out some information.
+            print('There was an error monitoring the version creation. Check the details:')
+            print(err._get_reason())
+
+        return response['state']
+
+    def deploy_model_ai_platform(self, EEify=True):
+        """
+        Deploy trained model to AI Platform.
+        Parameters
+        ----------
+        EEify: boolean
+            Before we can use the model in Earth Engine, it needs to be hosted by AI Platform. 
+            But before we can host the model on AI Platform we need to EEify (a new word!) it. 
+            The EEification process merely appends some extra operations to the input and outputs 
+            of the model in order to accomdate the interchange format between pixels from Earth Engine (float32) 
+            and inputs to AI Platform (base64).
+        """
+        if EEify:
+            print('Preparing the model for making predictions in Earth Engine')
+            model_path = self.training_params.get('job_dir') + 'model/'
+
+            meta_graph_def = saved_model_utils.get_meta_graph_def(model_path, 'serve')
+            inputs = meta_graph_def.signature_def['serving_default'].inputs
+            outputs = meta_graph_def.signature_def['serving_default'].outputs
+
+            # Just get the first thing(s) from the serving signature def.  i.e. this
+            # model only has a single input and a single output.
+            input_name = None
+            for k,v in inputs.items():
+                input_name = v.name
+                break
+            
+            output_name = None
+            for k,v in outputs.items():
+                output_name = v.name
+                break
+            
+            # Make a dictionary that maps Earth Engine outputs and inputs to 
+            # AI Platform inputs and outputs, respectively.
+            input_dict = json.dumps({input_name: "array"}) #"'" + json.dumps({input_name: "array"}) + "'"
+            output_dict = json.dumps({output_name: "prediction"}) #"'" + json.dumps({output_name: "prediction"}) + "'"
+
+            # Put the EEified model next to the trained model directory.
+            EEified_path = self.training_params.get('job_dir') + 'eeified/'
+
+            # Send EEified model to GCS
+            parser = argparse.ArgumentParser()
+            args = Namespace(source_dir=model_path,
+                             dest_dir=EEified_path,
+                             input=input_dict,
+                             output=output_dict,
+                             tag=None,
+                             variables=None
+                            )
+            config = CommandLineConfig()
+
+            eeify_model = PrepareModelCommand(parser)
+
+            eeify_model.run(args, config)
+
+            # Populate model_versions table
+            self.versions.at[self.version_id, 'eeified'] = True
+
+        # Deployed the model to AI Platform
+        version_name = 'v' + str(self.training_version)
+        print(f'Deploying {version_name} version of {self.model_name} model to AI Platform')
+        
+        # Get deployed model list
+        # Create a request to call projects().models().list.
+        project = 'projects/{}'.format(self.project_id)
+        request = self.ml.projects().models().list(parent=project)
+
+        # Make the call.
+        try:
+            response = request.execute()
+        except errors.HttpError as err:
+            # Something went wrong, print out some information.
+            print('There was an error creating the training job. Check the details:')
+            print(err._get_reason())
+
+        models_list = list(map(lambda x: x.get('name'), response.get('models')))
+
+        # Create model in AI platform
+        if not f'projects/{self.project_id}/models/{self.model_name}' in models_list:
+            # Create model model in AI platform
+            # Create a dictionary with the fields from the request body.
+            request_dict = {'name': self.model_name,
+                           'description': self.model_description}
+            # Create a request to call projects.models.create.
+            request = self.ml.projects().models().create(
+                          parent=project, body=request_dict)
+
+            # Make the call.
+            try:
+                response = request.execute()
+                print(response)
+            except errors.HttpError as err:
+                # Something went wrong, print out some information.
+                print('There was an error creating the model. Check the details:')
+                print(err._get_reason())
+
+        # Create model version
+        # Create a dictionary with the fields from the request body.
+        request_dict = {
+            'name': version_name,
+            'deploymentUri': EEified_path,
+            'runtimeVersion': '1.14',
+            'pythonVersion': '3.5',
+            'framework': 'TENSORFLOW',
+            'autoScaling': {
+                "minNodes": 10
+            }
+        }
+
+        # Create a request to call projects.models.versions.create.
+        request = self.ml.projects().models().versions().create(
+            parent=f'projects/{self.project_id}/models/{self.model_name}',
+            body=request_dict
+        )
+
+        # Make the call.
+        try:
+            response = request.execute()
+            print(response)
+        except errors.HttpError as err:
+            # Something went wrong, print out some information.
+            print('There was an error creating the model. Check the details:')
+            print(err._get_reason())
+
+        # Save deployment status
+        self.status = self.check_deployment_status(self.ml, project, self.model_name, version_name)
+        while not self.status in 'READY':
+            self.status = self.check_deployment_status(self.ml, project, self.model_name, version_name)
+            #Save temporal status in table
+            self.versions.at[self.version_id, 'deployed'] = False    
+            print('Current training status: ' +  self.status)
+
+            time.sleep(60)
+
+        #Save final status in table
+        self.versions.at[self.version_id, 'deployed'] = True
+
+        # TODO
+        # Save image and model_versions tables
+        df_to_csv(self.versions, "model_versions")
+        df_to_db(self.versions, self.engine, "model_versions")
+
+class Validator(object):
+    """
+    Validation of Deep Learning models in Skydipper
+    """
+    def __init__(self):
+        self.db_url = 'postgresql://postgres:postgres@0.0.0.0:5432/geomodels'
+        self.engine = sqlalchemy.create_engine(self.db_url)
+        self.table_names = self.engine.table_names()
+        #self.datasets_api = Skydipper.Collection(search=' '.join(self.slugs_list), object_type=['dataset'], app=['skydipper'], limit=len(self.slugs_list))
+        self.datasets = df_from_query(self.engine, 'dataset') 
+        self.images = df_from_query(self.engine, 'image')  
+        self.models = df_from_query(self.engine, 'model') 
+        self.versions = df_from_query(self.engine, 'model_versions') 
+        self.bucket = 'geo-ai'
+        self.project_id = 'skydipper-196010'
+
+    def select_model(self, model_name):
+        """
+        Selects model.
+        Parameters
+        ----------
+        model_name: string
+            Model name.
+        """
+        self.model_name = model_name
+        self.model_id = self.models[self.models['model_name'] == model_name].index[0]
+        self.model_type = self.models.iloc[self.model_id]['model_type']
+        self.model_output = self.models.iloc[self.model_id]['model_output']
+        self.version_names = list(map(lambda x: int(x), list(self.versions[self.versions['model_id'] == self.model_id]['version'])))
+        
+        print(f'The {self.model_name} model has the following versions: {self.version_names}')
+        return self.version_names
+            
+    def select_version(self, version):
+        """
+        Selects version.
+        Parameters
+        ----------
+        version: string
+            Version name.
+        """
+        self.version = version
+        self.version_id = self.versions[self.versions['version'] == self.version].index[0]
+        self.version_name = 'v'+ str(self.version)
+        self.training_params =json.loads(self.versions[self.versions['version'] == self.version]['training_params'][self.version_id])
+        self.image_ids = list(self.versions.iloc[self.version_id][['input_image_id', 'output_image_id']])
+        self.collections = list(self.datasets.iloc[list(self.images.iloc[self.image_ids]['dataset_id'])]['slug'])
+        self.bands = [self.training_params.get('in_bands'), self.training_params.get('out_bands')]
+        self.scale, self.init_date, self.end_date = list(self.images.iloc[self.image_ids[0]][['scale', 'init_date', 'end_date']])
+        
+        print(f'Selected version name: {self.version_name}')
+        print('Datasets: ', self.collections)
+        print('Bands: ', self.bands)
+        print('scale: ', self.scale)
+        print('init_date: ', self.init_date)
+        print('end_date: ', self.end_date)
+
+class Predictor(object):
+    """
+    Prediction of Deep Learning models in Skydipper
+    """
+    def __init__(self):
+        self.db_url = 'postgresql://postgres:postgres@0.0.0.0:5432/geomodels'
+        self.engine = sqlalchemy.create_engine(self.db_url)
+        self.table_names = self.engine.table_names()
+        #self.datasets_api = Skydipper.Collection(search=' '.join(self.slugs_list), object_type=['dataset'], app=['skydipper'], limit=len(self.slugs_list))
+        self.ee_tiles = 'https://earthengine.googleapis.com/map/{mapid}/{{z}}/{{x}}/{{y}}?token={token}' 
+        self.datasets = df_from_query(self.engine, 'dataset') 
+        self.images = df_from_query(self.engine, 'image')  
+        self.models = df_from_query(self.engine, 'model') 
+        self.versions = df_from_query(self.engine, 'model_versions') 
+        self.bucket = 'geo-ai'
+        self.project_id = 'skydipper-196010'
+        ee.Initialize()
+
+    def get_token(self, email):
+        password = getpass.getpass('Skydipper login password:')
+
+        payload = {
+            "email": f"{email}",
+            "password": f"{password}"
+        }
+
+        url = f'https://api.skydipper.com/auth/login'
+
+        headers = {'Content-Type': 'application/json'}
+
+        r = requests.post(url, data=json.dumps(payload), headers=headers)
+
+        self.token = r.json().get('data').get('token')
+
+    def select_model(self, model_name):
+        """
+        Selects model.
+        Parameters
+        ----------
+        model_name: string
+            Model name.
+        """
+        self.model_name = model_name
+        self.model_id = self.models[self.models['model_name'] == model_name].index[0]
+        self.model_type = self.models.iloc[self.model_id]['model_type']
+        self.model_output = self.models.iloc[self.model_id]['model_output']
+        self.version_names = list(map(lambda x: int(x), list(self.versions[self.versions['model_id'] == self.model_id]['version'])))
+        
+        print(f'The {self.model_name} model has the following versions: {self.version_names}')
+        return self.version_names
+            
+    def select_version(self, version):
+        """
+        Selects version.
+        Parameters
+        ----------
+        version: string
+            Version name.
+        """
+        self.version = version
+        self.version_id = self.versions[self.versions['version'] == self.version].index[0]
+        self.version_name = 'v'+ str(self.version)
+        self.training_params =json.loads(self.versions[self.versions['version'] == self.version]['training_params'][self.version_id])
+        self.image_ids = list(self.versions.iloc[self.version_id][['input_image_id', 'output_image_id']])
+        self.collections = list(self.datasets.iloc[list(self.images.iloc[self.image_ids]['dataset_id'])]['slug'])
+        self.bands = [self.training_params.get('in_bands'), self.training_params.get('out_bands')]
+        self.scale, self.init_date, self.end_date = list(self.images.iloc[self.image_ids[0]][['scale', 'init_date', 'end_date']])
+        
+        print(f'Selected version name: {self.version_name}')
+        print('Datasets: ', self.collections)
+        print('Bands: ', self.bands)
+        print('scale: ', self.scale)
+        print('init_date: ', self.init_date)
+        print('end_date: ', self.end_date)
+
+    def create_geostore_from_geojson(self, attributes, zoom=6):
+        """Parse valid geojson into a geostore object and register it to a
+        Gestore object on a server. 
+        Parameters
+        ----------
+        attributes: list
+            List of geojsons with the trainig, validation, and testing polygons.
+        zoom: int
+            A z-level for the map.
+        """
+        self.attributes = attributes
+        # TODO(replace code with SkyPy)
+        #self.polygon = Skydipper.Geometry(attributes=attributes) # This is here commented until SkyPy works again
+        #self.geostore_id = self.polygon.id # This is here commented until SkyPy works again
+        # Register geostore object on a server. Return the object, and instantiate a Geometry.
+        if self.token:
+            header= {
+                'Authorization': 'Bearer ' + self.token,
+                'Content-Type':'application/json'
+                    }
+            url = 'https://api.skydipper.com/v1/geostore'
+            r = requests.post(url, headers=header, json=self.attributes)
+
+            self.polygon = r.json().get('data').get('attributes')
+            self.geostore_id = r.json().get('data').get('id')
+
+        else:
+            raise ValueError(f'Token is required use get_token() method first.')
+
+        # Returns a folium map with the polygons
+        self.features = self.polygon['geojson']['features']
+        if len(self.features) > 0:
+            shapely_geometry = [shape(feature['geometry']) for feature in self.features]
+        else:
+            shapely_geometry = None
+    
+        self.centroid = list(shapely_geometry[0].centroid.coords)[0][::-1]
+
+        bbox = self.polygon.get('bbox')
+        self.bounds = [bbox[2:][::-1], bbox[:2][::-1]] 
+        ##bbox = self.multipolygon.attributes['bbox']
+        ##self.bounds = [bbox[2:][::-1], bbox[:2][::-1]]        
+
+        map = folium.Map(location=self.centroid, zoom_start=zoom)
+        map.fit_bounds(self.bounds)
+
+        self.nFeatures = len(self.features)
+        self.colors = ['#64D1B8', 'red', 'blue']
+        for n in range(self.nFeatures):
+            style_function = lambda x: {
+                'fillOpacity': 0.0,
+                    'weight': 4,
+                    'color': self.colors[0]
+                    }
+            folium.GeoJson(data=get_geojson_string(self.features[n]['geometry']), style_function=style_function,\
+                 name='Polygon').add_to(map)
+        
+        map.add_child(folium.LayerControl())
+        return map
+
+    def predict_ai_platform(self, init_date=None, end_date=None, zoom=6):
+        """
+        Predict in AI Platform.
+        Parameters
+        ----------
+        init_date: string
+            Initial date of the composite.
+        end_date: string
+            Last date of the composite.
+        """
+        if init_date and end_date:
+            self.init_date = init_date
+            self.end_date = end_date
+        else:
+            self.init_date = self.init_date
+            self.end_date = self.end_date
+
+        self.kernel_size = int(self.versions['kernel_size'].iloc[self.version_id])
+        self.input_image_id = self.versions.iloc[self.version_id]['input_image_id']
+        values = json.loads(self.images.iloc[self.input_image_id]['bands_min_max'])
+        # Create input composite
+        self.image = ee_collection_specifics.Composite(self.collections[0])(self.init_date, self.end_date)
+        # Normalize images
+        if bool(values): 
+            self.image = normalize_ee_images(self.image, self.collections[0], values)
+        # Select bands and convert them into float
+        self.image = self.image.select(self.bands[0]).float()
+
+        # Output image
+        if self.kernel_size == 1:
+            input_tile_size = [1, 1]
+            input_overlap_size = [0, 0]
+        if self.kernel_size >1 :
+            input_tile_size = [144, 144]
+            input_overlap_size = [8, 8]
+
+        # Load the trained model and use it for prediction.
+        model = ee.Model.fromAiPlatformPredictor(
+            projectName = self.project_id,
+            modelName = self.model_name,
+            version = self.version_name,
+            inputTileSize = input_tile_size,
+            inputOverlapSize = input_overlap_size,
+            proj = ee.Projection('EPSG:4326').atScale(self.scale),
+            fixInputProj = True,
+            outputBands = {'prediction': {
+                'type': ee.PixelType.float(),
+                'dimensions': 1,
+              }                  
+            }
+        )
+        self.predictions = model.predictImage(self.image.toArray()).arrayFlatten([self.bands[1]])
+
+        # Clip the prediction area with the polygon
+        geometry = ee.Geometry.Polygon(self.polygon.get('geojson').get('features')[0].get('geometry').get('coordinates'))
+        self.predictions  = self.predictions .clip(geometry)
+
+        # Segmentate image:
+        if self.model_output == 'segmentation':
+            maxValues = self.predictions.reduce(ee.Reducer.max())
+
+            self.predictions = self.predictions.addBands(maxValues)
+
+            expression = ""
+            for n, band in enumerate(bands[1]):
+                expression = expression + f"(b('{band}') == b('max')) ? {str(n+1)} : "
+
+            expression = expression + f"0"
+
+            segmentation = self.predictions.expression(expression)
+            self.predictions = self.predictions.addBands(segmentation.mask(segmentation).select(['constant'], ['categories']))
+        
+        # Use folium to visualize the input imagery and the predictions.
+        mapid = self.image.getMapId({'bands': ee_collection_specifics.ee_bands_rgb(self.collections[0]), 'min': 0, 'max': 1})
+
+        map = folium.Map(location=self.centroid, zoom_start=zoom)
+        map.fit_bounds(self.bounds)
+
+        folium.TileLayer(
+            tiles=self.ee_tiles.format(**mapid),
+            attr='Google Earth Engine',
+            overlay=True,
+            name='input median composite',
+          ).add_to(map)
+
+        for band in self.bands[1]:
+            mapid = self.predictions.getMapId({'bands': [band], 'min': 0, 'max': 2})
+
+            folium.TileLayer(
+                tiles=self.ee_tiles.format(**mapid),
+                attr='Google Earth Engine',
+                overlay=True,
+                name=band,
+              ).add_to(map)
+
+        if self.model_output == 'segmentation':
+            mapid = self.predictions.getMapId({'bands': ['categories'], 'min': 1, 'max': len(bands[1])})
+
+            folium.TileLayer(
+                tiles=self.ee_tiles.format(**mapid),
+                attr='Google Earth Engine',
+                overlay=True,
+                name='categories',
+              ).add_to(map)
+
+        for n in range(self.nFeatures):
+            style_function = lambda x: {
+                'fillOpacity': 0.0,
+                    'weight': 4,
+                    'color': self.colors[0]
+                    }
+            folium.GeoJson(data=get_geojson_string(self.features[n]['geometry']), style_function=style_function,\
+                 name='Polygon').add_to(map)
+
+        map.add_child(folium.LayerControl())
+
+        return map
 
 
 

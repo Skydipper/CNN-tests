@@ -54,7 +54,8 @@ def df_to_db(df, engine, table_name):
                               "init_date": Text,
                               "end_date": Text,
                               "bands_min_max": JSON,
-                              "norm_type": Text})
+                              "norm_type": Text,
+                              "geostore_id": Text})
     
     if table_name == "model":
         df.to_sql("model",
@@ -260,7 +261,8 @@ def check_status_data(task, file_paths):
     
     return status_list
 
-def removekey(dictionary, key):
-    if key in dictionary.keys():
-        del dictionary[key]
+def removekey(dictionary, keys):
+    for key in keys:
+        if key in dictionary.keys():
+            del dictionary[key]
     return dictionary
