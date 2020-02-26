@@ -1,0 +1,2 @@
+id;model_id;model_architecture;input_image_id;output_image_id;geostore_id;kernel_size;sample_size;training_params;version;data_status;training_status;eeified;deployed
+1;-9999;;2;3;f75559fb87f5c22deb56eb2a73aa4e12;256;1000;{};-9999;COMPLETED;;False;False

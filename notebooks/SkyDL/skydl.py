@@ -8,6 +8,9 @@ import pandas as pd
 import requests
 import getpass
 import argparse
+import tensorflow as tf
+from tensorboard import program
+from IPython.display import IFrame
 from argparse import Namespace
 from ee.cli.utils import CommandLineConfig
 from ee.cli.commands import PrepareModelCommand
@@ -19,7 +22,7 @@ from googleapiclient import errors
 from oauth2client.client import GoogleCredentials
 from tensorflow.python.tools import saved_model_utils
 
-from .utils import df_from_query, df_to_db, df_to_csv, polygons_to_geoStoreMultiPoligon, get_geojson_string,\
+from .utils import datasets, df_from_query, df_to_db, df_to_csv, polygons_to_geoStoreMultiPoligon, get_geojson_string,\
     min_max_values, normalize_ee_images, get_image_ids, GeoJSONs_to_FeatureCollections, check_status_data,\
     removekey
 import ee_collection_specifics
@@ -52,6 +55,8 @@ class Trainer(object):
         self.versions = df_from_query(self.engine, 'model_versions') 
         self.bucket = 'geo-ai'
         self.project_id = 'skydipper-196010'
+        self.colors = ['#02AEED', '#7020FF', '#F84B5A', '#FFAA36']
+        self.style_functions = [lambda x: {'fillOpacity': 0.0, 'weight': 4, 'color': color} for color in self.colors]
         # Get a Python representation of the AI Platform Training services
         self.credentials = GoogleCredentials.from_stream(self.privatekey_path)
         self.ml = discovery.build('ml', 'v1', credentials = self.credentials)
@@ -97,10 +102,13 @@ class Trainer(object):
         self.slugs = slugs
         self.init_date = init_date
         self.end_date= end_date
+        self.lat = lat
+        self.lon = lon
+        self.zoom = zoom
 
         map = folium.Map(
-                location=[lat, lon],
-                zoom_start=zoom,
+                location=[self.lat, self.lon],
+                zoom_start=self.zoom,
                 tiles='OpenStreetMap',
                 detect_retina=True,
                 prefer_canvas=True
@@ -116,7 +124,7 @@ class Trainer(object):
             tiles=tiles_url,
             attr='Google Earth Engine',
             overlay=True,
-            name=str(ee_collection_specifics.ee_bands_rgb(slug))).add_to(map)
+            name=self.datasets[self.datasets['slug'] == slug]['name'].iloc[0]).add_to(map)
 
         self.composites = composites
 
@@ -176,11 +184,13 @@ class Trainer(object):
     
         self.centroid = list(shapely_geometry[0].centroid.coords)[0][::-1]
     
-        #bbox = self.multipolygon.attributes['bbox']
-        #self.bounds = [bbox[2:][::-1], bbox[:2][::-1]]        
+        bbox = self.multipolygon.get('bbox')
+        self.bounds = [bbox[2:][::-1], bbox[:2][::-1]] 
+        ##bbox = self.multipolygon.attributes['bbox']
+        ##self.bounds = [bbox[2:][::-1], bbox[:2][::-1]]      
 
         map = folium.Map(location=self.centroid, zoom_start=zoom)
-        #map.fit_bounds(self.bounds)
+        map.fit_bounds(self.bounds)
 
         if hasattr(self, 'composites'):
             for n, slug in enumerate(self.slugs):
@@ -190,23 +200,41 @@ class Trainer(object):
                 tiles=tiles_url,
                 attr='Google Earth Engine',
                 overlay=True,
-                name=str(ee_collection_specifics.ee_bands_rgb(slug))).add_to(map)
+                name=self.datasets[self.datasets['slug'] == slug]['name'].iloc[0]).add_to(map)
 
         nFeatures = len(features)
-        colors = ['#64D1B8', 'red', 'blue']
         for n in range(nFeatures):
-            style_function = lambda x: {
-                'fillOpacity': 0.0,
-                    'weight': 4,
-                    'color': colors[0]
-                    }
-            folium.GeoJson(data=get_geojson_string(features[n]['geometry']), style_function=style_function,\
+            folium.GeoJson(data=get_geojson_string(features[n]['geometry']), style_function=self.style_functions[n],\
                  name=features[n].get('properties').get('name')).add_to(map)
         
         map.add_child(folium.LayerControl())
         return map
 
-    def normalize_images(self, scale, slugs=None, init_date=None, end_date=None, norm_type='global', zoom=6):
+    def get_normalization_values(self, slug):
+        """
+        Get normalization values
+        """
+        # Create composite
+        image = ee_collection_specifics.Composite(slug)(self.init_date, self.end_date)
+
+        bands = ee_collection_specifics.ee_bands(slug)
+        image = image.select(bands)
+
+        if ee_collection_specifics.normalize(slug):
+            # Get min/man values for each band
+            if (self.norm_type == 'geostore'):
+                if hasattr(self, 'geostore'):
+                    value = min_max_values(image, slug, self.scale, norm_type=self.norm_type, geostore=self.geostore)
+                else:
+                    raise ValueError(f"Missing geostore attribute. Please run create_geostore_from_geojson() first")
+            else:
+                value = min_max_values(image, slug, self.scale, norm_type=self.norm_type)
+        else:
+            value = {}
+
+        return json.dumps(value)
+
+    def normalize_images(self, scale, slugs=None, init_date=None, end_date=None, norm_type='global', lat=39.31, lon=0.302, zoom=6):
         """
         Returns the min/max values of each band in a composite.
         Parameters
@@ -239,50 +267,43 @@ class Trainer(object):
                 self.end_date = end_date
             else:
                 raise ValueError(f"Missing 3 required positional arguments: 'slugs', 'init_date', and 'end_date'")
+        if not self.lat:
+            self.lat = lat
+        if not self.lon:
+            self.lon = lon
+        if not self.zoom:
+            self.zoom = zoom
 
-        # Get normalization values
-        self.values = []
-        for slug in self.slugs:
-            # Create composite
-            image = ee_collection_specifics.Composite(slug)(self.init_date, self.end_date)
-
-            bands = ee_collection_specifics.ee_bands(slug)
-            image = image.select(bands)
-
-            if ee_collection_specifics.normalize(slug):
-                # Get min/man values for each band
-                if (self.norm_type == 'geostore'):
-                    if hasattr(self, 'geostore'):
-                        value = min_max_values(image, slug, self.scale, norm_type=self.norm_type, geostore=self.geostore)
-                    else:
-                        raise ValueError(f"Missing geostore attribute. Please run create_geostore_from_geojson() first")
-                else:
-                    value = min_max_values(image, slug, self.scale, norm_type=self.norm_type)
-            else:
-                value = {}
-            self.values.append(json.dumps(value))
-        
         # Populate image table
+        self.values = []
         for n, slug in enumerate(self.slugs):
             dataset_id = self.datasets[self.datasets['slug'] == slug].index[0]
 
             # Populate image table
             if self.norm_type == 'geostore':
                 condition = self.images[['dataset_id', 'scale', 'init_date', 'end_date', 'norm_type', 'geostore_id']]\
-                                .isin([dataset_id, self.scale, self.init_date, self.end_date, self.norm_type, self.geostore_id]).all(axis=1).any()
-                dictionary = dict(zip(list(self.images.keys()), [[dataset_id], [''], [self.scale], [self.init_date], [self.end_date], [self.values[n]], [self.norm_type], [self.geostore_id]]))
+                                .isin([dataset_id, self.scale, self.init_date, self.end_date, self.norm_type, self.geostore_id]).all(axis=1)
+                if condition.any():
+                    self.values.append(self.images[condition]['bands_min_max'].iloc[0])
+                else:
+                    self.values.append(self.get_normalization_values(slug))
+                    dictionary = dict(zip(list(self.images.keys()), [[dataset_id], [''], [self.scale], [self.init_date], [self.end_date], [value], [self.norm_type], [self.geostore_id]]))
+                    # Append values to table
+                    self.images = self.images.append(pd.DataFrame(dictionary), ignore_index = True, sort=False)
+
             else:
                 condition = self.images[['dataset_id', 'scale', 'init_date', 'end_date', 'norm_type']]\
-                                .isin([dataset_id, self.scale, self.init_date, self.end_date, self.norm_type]).all(axis=1).any()
-                dictionary = dict(zip(list(self.images.keys()), [[dataset_id], [''], [self.scale], [self.init_date], [self.end_date], [self.values[n]], [self.norm_type], ['']]))
-
-            if not condition:
-                # Append values to table
-                self.images = self.images.append(pd.DataFrame(dictionary), ignore_index = True, sort=False)
+                                .isin([dataset_id, self.scale, self.init_date, self.end_date, self.norm_type]).all(axis=1)
+                if condition.any():
+                    self.values.append(self.images[condition]['bands_min_max'].iloc[0])
+                else:
+                    self.values.append(self.get_normalization_values(slug))
+                    dictionary = dict(zip(list(self.images.keys()), [[dataset_id], [''], [self.scale], [self.init_date], [self.end_date], [self.values[n]], [self.norm_type], ['']]))
+                    # Append values to table
+                    self.images = self.images.append(pd.DataFrame(dictionary), ignore_index = True, sort=False)
 
         # Returns a folium map with normalized images
-        map = folium.Map(location=self.centroid, zoom_start=6)
-        #map.fit_bounds(self.bounds)
+        map = folium.Map(location=[self.lat, self.lon], zoom_start=self.zoom)
 
         self.norm_composites = []
         for n, slug in enumerate(self.slugs):
@@ -412,7 +433,7 @@ class Trainer(object):
             lists = ee.List.repeat(list, self.kernel_size)
             kernel = ee.Kernel.fixed(self.kernel_size, self.kernel_size, lists)
 
-            arrays = image_stack.neighborhoodToArray(kernel)
+            self.arrays = image_stack.neighborhoodToArray(kernel)
 
             # Training and validation size
             nFeatures = len(self.geostore.get('geojson').get('features'))
@@ -461,7 +482,7 @@ class Trainer(object):
                 for g in range(feature.size().getInfo()):
                     geomSample = ee.FeatureCollection([])
                     for j in range(nShards):
-                        sample = arrays.sample(
+                        sample = self.arrays.sample(
                             region = ee.Feature(feature_lists[i].get(g)).geometry(), 
                             scale = self.scale, 
                             numPixels = self.sample_size / nShards, # Size of the shard.
@@ -523,6 +544,8 @@ class Trainer(object):
             self.versions = self.versions.append(pd.DataFrame(dictionary), ignore_index = True, sort=False)
 
         # Save task status
+        df = self.versions[['input_image_id', 'output_image_id', 'geostore_id', 'kernel_size', 'sample_size']\
+                          ].isin([self.image_ids[0], self.image_ids[1], self.geostore_id, self.kernel_size, self.sample_size]).copy()
         if (df.empty) or not (self.versions[df.all(axis=1)]['data_status'] == 'COMPLETED').all():
             print('Exporting TFRecords to GCS:')
             status_list = check_status_data(task, self.file_paths)
@@ -670,12 +693,12 @@ class Trainer(object):
             if self.model_output == 'regression':
                 self.loss = 'mse'
             if self.model_output == 'segmentation':
-                self.loss = 'accuaracy'
+                self.loss = 'categorical_crossentropy'
         if not metrics:
             if self.model_output == 'regression':
                 self.metrics = ['mse']
-            if self.metrics == 'segmentation':
-                self.loss = ['accuaracy']
+            if self.model_output == 'segmentation':
+                self.metrics = ['accuracy']
 
         # Training parameters
         self.training_params = {
@@ -687,6 +710,7 @@ class Trainer(object):
             "kernel_size": int(self.kernel_size),
             "training_size": self.training_size,
             "validation_size": self.validation_size,
+            "test_size": self.test_size,
             "model_type": self.model_type,
             "model_output": self.model_output,
             "model_architecture": self.model_architecture,
@@ -707,15 +731,13 @@ class Trainer(object):
         self.model_id = self.models[(self.models['model_type'] == self.model_type) & (self.models['model_output'] == self.model_output) & (self.models['output_image_id'] == self.image_ids[1])].index[0]
 
         # Populate model_versions table
-        df = self.versions[['input_image_id', 'output_image_id', 'geostore_id', 'kernel_size', 'sample_size']\
-                          ].isin([self.image_ids[0], self.image_ids[1], self.geostore_id, self.kernel_size, self.sample_size]).copy()
         df = self.versions.copy()
-        df['training_params'] = df['training_params'].apply(lambda x : removekey(json.loads(x),['job_dir', 'training_size', 'validation_size']))
+        df['training_params'] = df['training_params'].apply(lambda x : removekey(json.loads(x),['job_dir', 'training_size', 'validation_size', 'test_size']))
 
         # Check if the version already exists
-        if (df['training_params'] == removekey(self.training_params.copy(), ['training_size', 'validation_size'])).any():
+        if (df['training_params'] == removekey(self.training_params.copy(), ['training_size', 'validation_size', 'test_size'])).any():
             # Get version id
-            self.version_id = df[df['training_params'] == removekey(self.training_params.copy(), ['training_size', 'validation_size'])].index[0]
+            self.version_id = df[df['training_params'] == removekey(self.training_params.copy(), ['training_size', 'validation_size', 'test_size'])].index[0]
             # Check status
             status = df.iloc[self.version_id]['training_status']
             print('Version already exists with training status equal to:', status)
@@ -751,7 +773,6 @@ class Trainer(object):
 
         # Create new version  
         else:
-            print('Create new version')
             # New training version and job name
             self.training_version = str(int(time.time()))
             job_name = 'job_v' + self.training_version
@@ -759,19 +780,20 @@ class Trainer(object):
             # Add job directory
             self.training_params['job_dir'] = 'gs://' + self.bucket + '/Models/' + str(self.model_id) + '/' +  str(self.training_version) + '/'
 
-            df = self.versions[['input_image_id', 'output_image_id', 'geostore_id', 'kernel_size', 'sample_size', 'data_status']].isin(
-                [self.image_ids[0], self.image_ids[1], self.geostore_id, self.kernel_size, self.sample_size, 'COMPLETED']).copy()
+            df = self.versions[['input_image_id', 'output_image_id', 'geostore_id', 'kernel_size', 'sample_size']\
+                              ].isin([self.image_ids[0], self.image_ids[1], self.geostore_id, self.kernel_size, self.sample_size]).copy()
+            df1 = self.versions[df.all(axis=1)]
+            if (df.all(axis=1).any()) and ((df1['version'] == -9999).any()):
+                print('Train in current version')
+                self.version_id = df1.index[df1['version'] == -9999].tolist()[0]
 
-            # Check if untrained version already exists
-            if (df.all(axis=1).any()):
-                self.version_id = df[df.all(axis=1)].index[0]
-
-                self.versions.at[self.version_id, 'model_id'] = self.model_id
+                self.versions.at[self.version_id, 'model_id'] = int(self.model_id)
                 self.versions.at[self.version_id, 'model_architecture'] = self.model_architecture
                 self.versions.at[self.version_id, 'training_params'] = json.dumps(self.training_params)
-                self.versions.at[self.version_id, 'version'] = self.training_version
+                self.versions.at[self.version_id, 'version'] = int(self.training_version)
 
             else:
+                print('Create new version')
                 dictionary = dict(zip(list(self.versions.keys()), [[''], [''], [self.image_ids[0]], [self.image_ids[1]], [self.geostore_id], [self.kernel_size], [self.sample_size], [''], [''], ['COMPLETED'], [''], [''], ['']]))
                 self.versions = self.versions.append(pd.DataFrame(dictionary), ignore_index = True, sort=False)
                 self.version_id = self.versions.index[-1]
@@ -807,8 +829,8 @@ class Trainer(object):
             'args': ['--params-file', params_path],
             'region': self.region,
             'jobDir': self.training_params['job_dir'],
-            'runtimeVersion': '1.14',
-            'pythonVersion': '3.5'}
+            'runtimeVersion': '1.15',
+            'pythonVersion': '3.7'}
 
         job_spec = {'jobId': job_name, 'trainingInput': self.training_inputs}
 
@@ -838,7 +860,7 @@ class Trainer(object):
             self.versions.at[self.version_id, 'training_status'] = self.status    
             print('Current training status: ' +  self.status)
 
-            time.sleep(60)
+            time.sleep(240)
 
         #Save final status in table
         self.versions.at[self.version_id, 'training_status'] = self.status
@@ -965,8 +987,8 @@ class Trainer(object):
         request_dict = {
             'name': version_name,
             'deploymentUri': EEified_path,
-            'runtimeVersion': '1.14',
-            'pythonVersion': '3.5',
+            'runtimeVersion': '1.15',
+            'pythonVersion': '3.7',
             'framework': 'TENSORFLOW',
             'autoScaling': {
                 "minNodes": 10
@@ -996,7 +1018,7 @@ class Trainer(object):
             self.versions.at[self.version_id, 'deployed'] = False    
             print('Current training status: ' +  self.status)
 
-            time.sleep(60)
+            time.sleep(30)
 
         #Save final status in table
         self.versions.at[self.version_id, 'deployed'] = True
@@ -1063,6 +1085,43 @@ class Validator(object):
         print('init_date: ', self.init_date)
         print('end_date: ', self.end_date)
 
+    def inspect_training_process(self):
+        """
+        We use TensorBoard to inspect the training process.
+        TensorBoard is a tool for providing the measurements and visualizations needed during the machine learning workflow.
+        """
+        job_dir = self.training_params.get('job_dir')
+        logs_dir = job_dir + 'logs/'
+
+        tb = program.TensorBoard()
+        tb.configure(argv=[None, '--logdir', logs_dir])
+        url = tb.launch()
+
+        return IFrame(url, width=20000, height=800)
+
+    def evaluate_model(self):
+        """
+        Evaluate the model on test data
+        """
+        job_dir = self.training_params.get('job_dir')
+        model_dir = job_dir + 'model/'
+
+        # Read model
+        print('Reading model')
+        model = tf.keras.models.load_model(model_dir)
+
+        # Prepare test dataset
+        dataset = datasets(self.training_params)
+        test_dataset = dataset.get_test_dataset()
+
+        # Evaluate the model on the test data using `evaluate`
+        print('Evaluating on test data')
+        results = model.evaluate(test_dataset, steps=int(self.training_params.get('test_size') / self.training_params.get('batch_size')))
+        metrics = self.training_params.get('metrics')[0]
+        print(f'test loss, test {metrics}:', results)
+
+        return results
+
 class Predictor(object):
     """
     Prediction of Deep Learning models in Skydipper
@@ -1079,6 +1138,8 @@ class Predictor(object):
         self.versions = df_from_query(self.engine, 'model_versions') 
         self.bucket = 'geo-ai'
         self.project_id = 'skydipper-196010'
+        self.colors = ['#02AEED', '#7020FF', '#F84B5A', '#FFAA36']
+        self.style_functions = [lambda x: {'fillOpacity': 0.0, 'weight': 4, 'color': color} for color in self.colors]
         ee.Initialize()
 
     def get_token(self, email):
@@ -1185,20 +1246,14 @@ class Predictor(object):
         map.fit_bounds(self.bounds)
 
         self.nFeatures = len(self.features)
-        self.colors = ['#64D1B8', 'red', 'blue']
         for n in range(self.nFeatures):
-            style_function = lambda x: {
-                'fillOpacity': 0.0,
-                    'weight': 4,
-                    'color': self.colors[0]
-                    }
-            folium.GeoJson(data=get_geojson_string(self.features[n]['geometry']), style_function=style_function,\
+            folium.GeoJson(data=get_geojson_string(self.features[n]['geometry']), style_function=self.style_functions[n],\
                  name='Polygon').add_to(map)
         
         map.add_child(folium.LayerControl())
         return map
 
-    def predict_ai_platform(self, init_date=None, end_date=None, zoom=6):
+    def predict_ai_platform(self, init_date=None, end_date=None, min=0, max=1, zoom=6):
         """
         Predict in AI Platform.
         Parameters
@@ -1207,6 +1262,10 @@ class Predictor(object):
             Initial date of the composite.
         end_date: string
             Last date of the composite.
+        min: float
+            Min value of the predicted image.
+        max: float
+            Max value of the predicted image.
         """
         if init_date and end_date:
             self.init_date = init_date
@@ -1231,7 +1290,7 @@ class Predictor(object):
             input_tile_size = [1, 1]
             input_overlap_size = [0, 0]
         if self.kernel_size >1 :
-            input_tile_size = [144, 144]
+            input_tile_size = [56, 56]#[144, 144]
             input_overlap_size = [8, 8]
 
         # Load the trained model and use it for prediction.
@@ -1262,7 +1321,7 @@ class Predictor(object):
             self.predictions = self.predictions.addBands(maxValues)
 
             expression = ""
-            for n, band in enumerate(bands[1]):
+            for n, band in enumerate(self.bands[1]):
                 expression = expression + f"(b('{band}') == b('max')) ? {str(n+1)} : "
 
             expression = expression + f"0"
@@ -1284,7 +1343,7 @@ class Predictor(object):
           ).add_to(map)
 
         for band in self.bands[1]:
-            mapid = self.predictions.getMapId({'bands': [band], 'min': 0, 'max': 2})
+            mapid = self.predictions.getMapId({'bands': [band], 'min': min, 'max': max})
 
             folium.TileLayer(
                 tiles=self.ee_tiles.format(**mapid),
@@ -1294,7 +1353,7 @@ class Predictor(object):
               ).add_to(map)
 
         if self.model_output == 'segmentation':
-            mapid = self.predictions.getMapId({'bands': ['categories'], 'min': 1, 'max': len(bands[1])})
+            mapid = self.predictions.getMapId({'bands': ['categories'], 'min': 1, 'max': len(self.bands[1])})
 
             folium.TileLayer(
                 tiles=self.ee_tiles.format(**mapid),
@@ -1304,12 +1363,7 @@ class Predictor(object):
               ).add_to(map)
 
         for n in range(self.nFeatures):
-            style_function = lambda x: {
-                'fillOpacity': 0.0,
-                    'weight': 4,
-                    'color': self.colors[0]
-                    }
-            folium.GeoJson(data=get_geojson_string(self.features[n]['geometry']), style_function=style_function,\
+            folium.GeoJson(data=get_geojson_string(self.features[n]['geometry']), style_function=self.style_functions[n],\
                  name='Polygon').add_to(map)
 
         map.add_child(folium.LayerControl())

@@ -63,7 +63,7 @@ def train_and_validation(args):
     validation_dataset = util.get_validation_dataset()
 
     # Setup TensorBoard callback.
-    tensorboard_cb = tf.keras.callbacks.TensorBoard(os.path.join(config.get('job_dir'), 'logs'))
+    tensorboard_cb = tf.keras.callbacks.TensorBoard(os.path.join(config.get('job_dir'), 'logs'), histogram_freq=1)
 
     # Train model
     keras_model.fit(
@@ -75,7 +75,7 @@ def train_and_validation(args):
         verbose=1,
         callbacks=[tensorboard_cb])
 
-    tf.contrib.saved_model.save_keras_model(keras_model, os.path.join(config.get('job_dir'), 'model'))
+    tf.keras.models.save_model(keras_model, os.path.join(config.get('job_dir'), 'model'), save_format="tf")
 
 if __name__ == '__main__':
     args = get_args()
