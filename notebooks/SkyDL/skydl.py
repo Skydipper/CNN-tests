@@ -989,10 +989,7 @@ class Trainer(object):
             'deploymentUri': EEified_path,
             'runtimeVersion': '1.15',
             'pythonVersion': '3.7',
-            'framework': 'TENSORFLOW',
-            'autoScaling': {
-                "minNodes": 10
-            }
+            'framework': 'TENSORFLOW'
         }
 
         # Create a request to call projects.models.versions.create.
