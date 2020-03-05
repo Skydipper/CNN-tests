@@ -6,6 +6,13 @@ import json
 import tensorflow as tf
 import ee
 
+from argparse import Namespace
+import grpc
+from tensorboard.uploader import auth, server_info as server_info_lib, uploader as uploader_lib
+from tensorboard.uploader.uploader_main import _UploadIntent, _get_intent, _get_server_info
+from tensorboard.uploader.proto import write_service_pb2_grpc
+from tensorboard.uploader.server_info import allowed_plugins
+
 import ee_collection_specifics
 
 
@@ -66,6 +73,59 @@ class datasets():
         dataset = self.get_dataset(glob)
         dataset = dataset.batch(1).repeat()
         return dataset
+
+class UploadExperiment():
+    """Upload an experiment to TensorBoard.dev from the given logdir."""
+
+    def __init__(self, logdir, name=None, description=None,origin="",api_endpoint=""):
+        
+        self.logdir = logdir
+        self.name = name
+        self.description = description   
+        self.origin = name
+        self.api_endpoint = description
+        
+        self.args = Namespace(logdir=self.logdir,
+                         name=self.name,
+                         description=self.description,
+                         origin=self.origin,
+                         api_endpoint=self.api_endpoint
+                        )
+        
+        store = auth.CredentialsStore()
+        credentials = store.read_credentials()
+        composite_channel_creds = grpc.composite_channel_credentials(
+            grpc.ssl_channel_credentials(), auth.id_token_call_credentials(credentials)
+            )
+        
+        self.server_info = _get_server_info(self.args)
+        self.channel = grpc.secure_channel(
+            self.server_info.api_server.endpoint,
+            composite_channel_creds,
+            options=None
+        )
+        
+    def execute(self):
+        api_client = write_service_pb2_grpc.TensorBoardWriterServiceStub(self.channel)
+
+        uploader = uploader_lib.TensorBoardUploader(
+            api_client,
+            self.args.logdir,
+            allowed_plugins=server_info_lib.allowed_plugins(self.server_info),
+            name=self.args.name,
+            description=self.args.description,
+        )
+        experiment_id = uploader.create_experiment()
+        url = server_info_lib.experiment_url(self.server_info, experiment_id)
+        
+        # Blocks forever to continuously upload data from the logdir
+        #print("Upload started and will continue reading any new data as it's added")
+        #print("View your TensorBoard live at: %s" % url)
+        #uploader.start_uploading()
+        # Runs one upload cycle
+        uploader._upload_once()
+        
+        return url
 
 def df_from_query(engine, table_name):
     """Read DataFrames from query"""

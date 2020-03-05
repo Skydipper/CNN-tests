@@ -3,7 +3,9 @@ import Skydipper
 import sqlalchemy
 import folium
 import json
+import os
 import time
+import shutil
 import pandas as pd
 import requests
 import getpass
@@ -22,7 +24,7 @@ from googleapiclient import errors
 from oauth2client.client import GoogleCredentials
 from tensorflow.python.tools import saved_model_utils
 
-from .utils import datasets, df_from_query, df_to_db, df_to_csv, polygons_to_geoStoreMultiPoligon, get_geojson_string,\
+from .utils import datasets, UploadExperiment, df_from_query, df_to_db, df_to_csv, polygons_to_geoStoreMultiPoligon, get_geojson_string,\
     min_max_values, normalize_ee_images, get_image_ids, GeoJSONs_to_FeatureCollections, check_status_data,\
     removekey
 import ee_collection_specifics
@@ -732,12 +734,12 @@ class Trainer(object):
 
         # Populate model_versions table
         df = self.versions.copy()
-        df['training_params'] = df['training_params'].apply(lambda x : removekey(json.loads(x),['job_dir', 'training_size', 'validation_size', 'test_size']))
+        df['training_params'] = df['training_params'].apply(lambda x : removekey(json.loads(x),['job_dir', 'training_size', 'validation_size', 'test_size', 'tb_url']))
 
         # Check if the version already exists
-        if (df['training_params'] == removekey(self.training_params.copy(), ['training_size', 'validation_size', 'test_size'])).any():
+        if (df['training_params'] == removekey(self.training_params.copy(), ['training_size', 'validation_size', 'test_size', 'tb_url'])).any():
             # Get version id
-            self.version_id = df[df['training_params'] == removekey(self.training_params.copy(), ['training_size', 'validation_size', 'test_size'])].index[0]
+            self.version_id = df[df['training_params'] == removekey(self.training_params.copy(), ['training_size', 'validation_size', 'test_size', 'tb_url'])].index[0]
             # Check status
             status = df.iloc[self.version_id]['training_status']
             print('Version already exists with training status equal to:', status)
@@ -864,6 +866,48 @@ class Trainer(object):
 
         #Save final status in table
         self.versions.at[self.version_id, 'training_status'] = self.status
+        
+        # Get TensorBoard.dev url
+        print('Uploading an experiment to TensorBoard.dev')
+        if self.status == 'SUCCEEDED':
+            job_dir = self.training_params.get('job_dir')
+            logs_dir = job_dir + 'logs/'
+
+            # Download log files into local directory
+            prefix = logs_dir.replace(f'gs://{self.bucket}/', '')
+            local_dir = 'logs/'
+
+            if not os.path.exists(local_dir):
+                os.makedirs(local_dir)
+
+            bucket = self.storage_client.get_bucket(self.bucket)
+            blobs = bucket.list_blobs(prefix=prefix)  # Get list of files
+            for n, blob in enumerate(blobs):
+                if n > 0:
+                    file_path = blob.name.replace(prefix, '') 
+                    if '/' in file_path:
+                        fp = file_path.split('/')
+                        folder = '/'.join(fp[:-1])
+                        file = fp[-1]
+                        if not file:
+                            os.makedirs(local_dir+folder)
+                        else:
+                            blob.download_to_filename(local_dir+folder+'/'+ file)  
+                    else:
+                        blob.download_to_filename(local_dir+file_path)  
+
+            # Upload an experiment to TensorBoard.dev from the given logdir
+            self.url = UploadExperiment(logdir=local_dir).execute()   
+
+            # Remove local log's directory
+            try:
+                shutil.rmtree(local_dir)
+            except OSError as e:
+                print ("Error: %s - %s." % (e.filename, e.strerror))
+
+            #Save TensorBoard.dev url in table
+            self.training_params['tb_url'] = self.url
+            self.versions.at[self.version_id, 'training_params'] = json.dumps(self.training_params)
 
         # TODO
         # Save image and model_versions tables
@@ -1087,14 +1131,9 @@ class Validator(object):
         We use TensorBoard to inspect the training process.
         TensorBoard is a tool for providing the measurements and visualizations needed during the machine learning workflow.
         """
-        job_dir = self.training_params.get('job_dir')
-        logs_dir = job_dir + 'logs/'
+        self.url = json.loads(self.versions['training_params'].iloc[self.version_id]).get('tb_url')
 
-        tb = program.TensorBoard()
-        tb.configure(argv=[None, '--logdir', logs_dir])
-        url = tb.launch()
-
-        return IFrame(url, width=20000, height=800)
+        return IFrame(self.url, width=20000, height=800)
 
     def evaluate_model(self):
         """
